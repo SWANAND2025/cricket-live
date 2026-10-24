@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cricket Live Dashboard</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b2430;--mut:#6b7785;--ac:#0a7d4f;--bd:#e1e6ec}
+@media(prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a222b;--tx:#e8edf2;--mut:#92a0ae;--ac:#2fd08a;--bd:#2a3541}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--ac);color:#fff}
+header h1{font-size:1.1rem;margin:0}button{background:#fff;color:#0a7d4f;border:0;border-radius:6px;padding:7px 12px;font-weight:600;cursor:pointer}
+main{max-width:1100px;margin:auto;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.card{background:var(--card);border:2px solid var(--bd);border-radius:10px;padding:12px;cursor:pointer}
+.card.sel{border-color:var(--ac)}.card h3{margin:6px 0;font-size:.95rem}
+.badge{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#d33;color:#fff}.badge.COMPLETED{background:#667}
+.row{display:flex;justify-content:space-between;font-size:1.05rem;margin:3px 0}.mut{color:var(--mut);font-size:.85rem}
+.detail{margin-top:16px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}th:first-child,td:first-child{text-align:left}
+.com{max-height:260px;overflow:auto;font-size:.85rem}.com div{padding:3px 0;border-bottom:1px dashed var(--bd)}
+h4{margin:10px 0 6px}
+</style></head><body>
+<header><h1>🏏 Cricket Live Dashboard</h1><button onclick="newMatch()">+ New match</button></header>
+<main><div id="grid" class="grid"></div><div id="detail"></div></main>
+<script>
+let data=[],sel=null;
+const es=new EventSource('/api/stream');
+es.addEventListener('scores',e=>{data=JSON.parse(e.data);if(!sel||!data.find(m=>m.id===sel))sel=data.length?data[0].id:null;render()});
+const sc=t=>`${t.runs}/${t.wickets} <span class="mut">(${t.overs})</span>`;
+function pick(id){sel=id;render()}
+function newMatch(){const a=prompt('Team A','India'),b=prompt('Team B','England');if(a&&b)fetch(`/api/matches?teamA=${encodeURIComponent(a)}&teamB=${encodeURIComponent(b)}&overs=10`,{method:'POST'})}
+function render(){
+ document.getElementById('grid').innerHTML=data.map(m=>`<div class="card ${m.id===sel?'sel':''}" onclick="pick('${m.id}')">
+  <span class="badge ${m.status}">${m.status}</span><h3>${m.title}</h3>
+  <div class="row"><b>${m.teamA.name}</b><span>${sc(m.teamA)}</span></div>
+  <div class="row"><b>${m.teamB.name}</b><span>${sc(m.teamB)}</span></div>
+  <div class="mut">${m.status==='LIVE'?(m.innings===2?'Target '+m.target+' · ':'')+m.striker+'':''}${m.result||''}</div></div>`).join('').replace(/<div class="mut">[^<]*<\/div>/g,'');
+ const m=data.find(x=>x.id===sel);if(!m){document.getElementById('detail').innerHTML='';return}
+ const bat=t=>`<table><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>${t.players.filter(p=>p.batted).map(p=>`<tr><td>${p.name}${p.out?'':'*'}</td><td>${p.runs}</td><td>${p.balls}</td><td>${p.fours}</td><td>${p.sixes}</td><td>${p.strikeRate}</td></tr>`).join('')}</table>`;
+ const bowl=t=>`<table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Eco</th></tr>${t.players.filter(p=>p.ballsBowled>0).map(p=>`<tr><td>${p.name}</td><td>${p.bowlingOvers}</td><td>${p.runsConceded}</td><td>${p.wickets}</td><td>${p.economy}</td></tr>`).join('')}</table>`;
+ document.getElementById('detail').innerHTML=`<div class="detail"><h3>${m.title} ${m.status==='LIVE'?'<span class="badge">LIVE</span>':''}</h3>
+ <div class="mut">${m.status==='LIVE'?`Batting: ${m.battingTeam} · ${m.strikerName}* & ${m.nonStrikerName} · Bowler: ${m.bowlerName}${m.innings===2?' · Target '+m.target:''}`:`<b>${m.result}</b>`}</div>
+ <div class="cols"><div class="wrap"><h4>${m.teamA.name} batting</h4>${bat(m.teamA)}<h4>${m.teamB.name} bowling</h4>${bowl(m.teamB)}</div>
+ <div class="wrap"><h4>${m.teamB.name} batting</h4>${bat(m.teamB)}<h4>${m.teamA.name} bowling</h4>${bowl(m.teamA)}</div></div>
+ <h4>Commentary</h4><div class="com">${m.commentary.map(c=>`<div>${c}</div>`).join('')}</div>
+ <p class="mut"><a href="/api/matches/${m.id}/summary" target="_blank">Match summary JSON</a> · <a href="/api/matches/${m.id}/players" target="_blank">Players JSON</a></p></div>`;
+}
+</script></body></html>
